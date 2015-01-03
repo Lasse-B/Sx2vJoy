@@ -28,7 +28,7 @@ Icon_1=%In_Dir%\Sx2vJoy.ico
 ;
 ; Special Thanks for being helpful testers:
 ; Rissen - SpaceMouse Pro
-; CommanderHaggard - SpaceBall 5000
+; CommanderHaggard - SpaceBall 5000 USB
 ; Asura - SpacePilot
 ; Cmdr Zok - SpaceExplorer
 
@@ -38,9 +38,8 @@ if not A_IsAdmin
    ExitApp
 }
 
-version := "1.1 build 5"
+version := "1.1 build 6"
 
-#include %A_ScriptDir%\VJoyLib\VJoy_lib.ahk ; include the vJoy library
 #Include %A_ScriptDir%\AHKHIDLib\AHKHID.ahk ; include the HID library
 Process, Priority, , High
 coordmode, tooltip, screen
@@ -50,9 +49,10 @@ coordmode, tooltip, screen
 
 ; ---------- vJoy init ----------
 axis_list_vjoy := Array("X","Y","Z","RX","RY","RZ")
-LoadPackagedLibrary()
+HID_USAGE_X := 0x30, HID_USAGE_Y := 0x31, HID_USAGE_Z := 0x32, HID_USAGE_RX:= 0x33, HID_USAGE_RY:= 0x34, HID_USAGE_RZ:= 0x35
+hDLL := LoadPackagedLibrary()
 vjoy_id := _vjoy_id()      ; The current vjoy device the app is trying to use. Also serves as a "last item selected" for the vjoy id dropdown
-vjoy_ready := InitVJoy(vjoy_id) ; Whether the vjoy_id is connected and under the app's control
+InitVJoy(vjoy_id) ; Whether the vjoy_id is connected and under the app's control
 vJoyButtons := DllCall("vJoyInterface\GetVJDButtonNumber", "Int", vjoy_id)
 VJOY_SetAxes(50, 50, 50, 50, 50, 50)
 OnExit, AppQuit
@@ -124,23 +124,20 @@ InputMsg(wParam, lParam) {
    if (devh == -1)
       return
    
-   if  (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True) == RIM_TYPEHID) And (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) == 1133) {
+   if (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True) == RIM_TYPEHID) And (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) == 1133) {
       device := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
-      (device = 50726) ? pointer := "btnsSN" ; SpaceNavigator
-      (device = 50731) ? pointer := "btnsSM" ; SpaceMouse Pro
-      (device = 50727) ? pointer := "btnsSE" ; SpaceExplorer
       (device = 50721) ? pointer := "btnsSB" ; SpaceBall 5000 (USB)
       (device = 50725) ? pointer := "btnsSP" ; SpacePilot (non-Pro)
+      (device = 50726) ? pointer := "btnsSN" ; SpaceNavigator
+      (device = 50727) ? pointer := "btnsSE" ; SpaceExplorer
+      (device = 50731) ? pointer := "btnsSM" ; SpaceMouse Pro
       
       If (AHKHID_GetInputData(lParam, uData) <> -1) {
-          NumPut(&StringToSend, CopyDataStruct, 8)
          msg := NumGet(uData, 0, "UChar")
          if (msg == 1) { ; retrieve translational axes
-            if (setupmode = 1) and (setupmodeblind = -1)
-               _setup(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 1)
-            if (setupmodeblind = 1) and (setupmode = -1)
-               _setupblind(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 1)
-            else
+            ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 1)
+            ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 1)
+            if ((setupmode = -1) and (setupmodeblind = -1))
             {
                SN_xVal_virt := _process_axis("x", NumGet(uData, 1, "Short"))
                SN_yVal_virt := _process_axis("y", NumGet(uData, 3, "Short"))
@@ -148,11 +145,9 @@ InputMsg(wParam, lParam) {
             }
          }
          else if (msg == 2) { ; retrieve rotational axes
-            if (setupmode = 1) and (setupmodeblind = -1)
-               _setup(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 2)
-            if (setupmodeblind = 1) and (setupmode = -1)
-               _setupblind(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 2)
-            else
+            ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 2)
+            ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), 2)
+            if ((setupmode = -1) and (setupmodeblind = -1))
             {
                SN_xRVal_virt := _process_axis("xR", NumGet(uData, 1, "Short"))
                SN_yRVal_virt := _process_axis("yR", NumGet(uData, 3, "Short"))
@@ -161,7 +156,7 @@ InputMsg(wParam, lParam) {
          }
          else if (msg == 3) { ; retrieve buttons
             byte0 := NumGet(uData, 1, "Int")
-             if (buttonlog = 1)
+            if (buttonlog = 1)
                _logButton(byte0, device)
             else
             {
@@ -173,8 +168,7 @@ InputMsg(wParam, lParam) {
                   {
                      %pointer%[A_Index,4] := state
                      (%pointer%[A_Index,1] = "k") ? Kbd_SetBtn(state,pointer,A_Index)
-                     ;(%pointer%[A_Index,1] = "j") ? (%pointer%[A_Index,2] > vJoyButtons) ? break : VJoy_SetBtn(state, vjoy_id, %pointer%[A_Index,2])
-                     (%pointer%[A_Index,1] = "j") ? (%pointer%[A_Index,2] <= vJoyButtons) ? VJoy_SetBtn(state, vjoy_id, %pointer%[A_Index,2])
+                     (%pointer%[A_Index,1] = "j") ? (%pointer%[A_Index,2] <= vJoyButtons) ? ? DllCall("vJoyInterface\SetBtn", "Int", state, "UInt", vjoy_id, "UChar", %pointer%[A_Index,2])
                   }
                }
             }
@@ -196,20 +190,19 @@ Kbd_SetBtn(state,pointer,index) {
       sendinput {blind}%up%
 }
 
-VJOY_SetAxes(SNavX, SNavY, SNavZ, SNavU, SNavV, SNavR) {
-   global vjoy_id, axis_list_vjoy
-   ax := axis_list_vjoy[1]
-   VJoy_SetAxis(32768 / 100 * SNavX, vjoy_id, HID_USAGE_%ax%)
-   ax := axis_list_vjoy[2]
-   VJoy_SetAxis(32768 / 100 * SNavY, vjoy_id, HID_USAGE_%ax%)
-   ax := axis_list_vjoy[3]
-   VJoy_SetAxis(32768 / 100 * SNavZ, vjoy_id, HID_USAGE_%ax%)
-   ax := axis_list_vjoy[4]
-   VJoy_SetAxis(32768 / 100 * SNavU, vjoy_id, HID_USAGE_%ax%)
-   ax := axis_list_vjoy[5]
-   VJoy_SetAxis(32768 / 100 * SNavV, vjoy_id, HID_USAGE_%ax%)
-   ax := axis_list_vjoy[6]
-   VJoy_SetAxis(32768 / 100 * SNavR, vjoy_id, HID_USAGE_%ax%)
+VJOY_SetAxes(SNavX, SNavY, SNavZ, SNavRX, SNavRY, SNavRZ) {
+   global vjoy_id, axis_list_vjoy, version
+   loop, 6
+   {
+      ax := axis_list_vjoy[A_Index]
+      
+      ret := DllCall("vJoyInterface\SetAxis", "Int", 327.68 * SNav%ax%, "UInt", vjoy_id, "UInt", HID_USAGE_%ax%)
+      if (!ret) {
+         axis_val := 327.68 * SNav%ax%
+         usage := HID_USAGE_%ax%
+         msgbox,,Sx2vJoy %version%,VJOY_SetAxes`n`naxis: %ax%`nusage: %usage%`naxis value: %axis_val%`nErrorLevel: %ErrorLevel%`nReturned: %ret%
+      }
+   }
 }
 
 _logButton(btnID, device) {
@@ -266,7 +259,7 @@ _process_axis(axis, axis_phys) {
 }
 
 _process_throttle(axis, axis_phys, method) {
-   global axis_x, axis_y, axis_z, axis_xR, axis_yR, axis_zR, deadzone, linear_sensitivity, logarithmic_sensitivity, invert, __cps, inc, zro
+   global axis_x, axis_y, axis_z, axis_xR, axis_yR, axis_zR, deadzone, linear_sensitivity, logarithmic_sensitivity, invert, __cps, inc, zro, version
    global throttle_last_pos, Controller_settings, axis_suspended, axis_suspend_condition, axis_suspend_start, wheelstate, wheelstate_max, wheelstate_min, vjoy_id, axis_list_vjoy
    
    ; throttle deadzone
@@ -323,22 +316,29 @@ _process_throttle(axis, axis_phys, method) {
       axis_virt := axis_virt > 100 ? 100 : axis_virt
       
       Controller_settings[axis_%axis%,throttle_last_pos] := axis_virt
-      VJoy_SetAxis(32768 / 100 * axis_virt, vjoy_id, HID_USAGE_%ax%)
+      ret := DllCall("vJoyInterface\SetAxis", "Int", 327.68 * axis_virt, "UInt", vjoy_id, "UInt", HID_USAGE_%ax%)
+      if (!ret) {
+         axis_val := 327.68 * axis_virt
+         usage := HID_USAGE_%ax%
+         msgbox,,Sx2vJoy %version%,_Process_Throttle`n`naxis: %ax%`nusage: %usage%`naxis value: %axis_val%`nErrorLevel: %ErrorLevel%`nReturned: %ret%
+      }
    }
 }
 
 MoveAxis(ax) {
-   global axis_list_vjoy, vjoy_id, HID_USAGE
+   global axis_list_vjoy, vjoy_id, ;HID_USAGE
    start := 16384
    if strlen(ax) = 2
       ax := "R" . substr(ax, 1, 1)
    loop
    {
-      VJoy_SetAxis(start, vjoy_id, HID_USAGE_%ax%)
+      ;VJoy_SetAxis(start, vjoy_id, HID_USAGE_%ax%)
+      DllCall("vJoyInterface\SetAxis", "Int", start, "UInt", vjoy_id, "UInt", HID_USAGE_%ax%)
       start -= 150
       if start <= 0
       {
-         VJoy_SetAxis(16384, vjoy_id, HID_USAGE_%ax%)
+         ;VJoy_SetAxis(16384, vjoy_id, HID_USAGE_%ax%)
+         DllCall("vJoyInterface\SetAxis", "Int", 16384, "UInt", vjoy_id, "UInt", HID_USAGE_%ax%)
          break
       }
       sleep, 10
@@ -645,75 +645,50 @@ _logSens(value) {
    return value
 }
 
-InitVJoy(vjoy_id){
-      if (VJoy_Ready(vjoy_id)){
-         VJoy_RelinquishVJD(vjoy_id)
-         VJoy_Close()
-      }
-      
-      vjoy_status := DllCall("vJoyInterface\GetVJDStatus", "UInt", vjoy_id)
-      
-      if (vjoy_status == 2){
-         msgbox err 2
-      }  else if (vjoy_status >= 3){
-         ; 3-4 not available
-         msgbox err 3 or 4
-      } else if (vjoy_status == 0){
-         ; already owned by this app - should not come here as we want to release non used sticks
-         msgbox already owned
-      }
-      if (vjoy_status <= 1){
-         VJoy_Init(vjoy_id)
-         
-         ; Seem to need this to allow reconnecting to sticks (ie you selected id 1 then 2 then 1 again. Else control of stick does not resume
-         VJoy_AcquireVJD(vjoy_id)
-         VJoy_ResetVJD(vjoy_id)
-         if (VJoy_Ready(vjoy_id)){
-            ;vjoy_ready := 1
-            return 1
-            VJOY_SetAxes(16384, 16384, 16384, 16384, 16384, 16384)
-            return 1
-         } else {
-            msgbox Problem Connecting
-            ;vjoy_ready := 0
-            return 0
-         }
-      } else {
-         vjoy_ready := 0
-      }
+InitVJoy(vjoy_id) {
+   global version
+   if (vjoy_id <> 0) and (vjoy_id <> "")
+      _VJoy_Close()
+   
+   vjoy_status := DllCall("vJoyInterface\GetVJDStatus", "UInt", vjoy_id)
+   
+   if (vjoy_status = 0) {
+      msgbox,,Sx2vJoy %version%,Sx2vJoy already has control of vJoy ID %vjoy_id%.
+   ;} else if (vjoy_status = 1) { ; this is what we ideally have, so no need to bug the user about it
+   ;   msgbox,,Sx2vJoy %version%,No feeder already has control of vJoy ID %vjoy_id%.
+   } else if (vjoy_status = 2) {
+      msgbox,,Sx2vJoy %version%,Another feeder already has control of vJoy ID %vjoy_id%.
+   }  else if (vjoy_status >= 3) {
+      msgbox,,Sx2vJoy %version%,vJoy device ID %vjoy_id% does not exist or driver is down.
+   }  else if (vjoy_status >= 4) {
+      msgbox,,Sx2vJoy %version%,Unknown. Sorry.
+   }
+   if (vjoy_status <= 1) {
+      DllCall("vJoyInterface\AcquireVJD", "UInt", vjoy_id)
+      DllCall("vJoyInterface\ResetVJD", "UInt", vjoy_id)
+      return 1
+   }
 }
 
 LoadPackagedLibrary() {
-   dllpath := (A_PtrSize < 8) ? "VJoyLib\x86\vJoyInterface.dll" : "C:\Program Files\vJoy\vJoyInterface.dll"
+   global version
+   dllpath := (A_PtrSize < 8) ? "VJoyLib\x86\vJoyInterface.dll" : "VJoyLib\x64\vJoyInterface.dll"
    hDLL := DLLCall("LoadLibrary", "Str", dllpath)
    if (!hDLL)
-      MsgBox, [%A_ThisFunc%] LoadLibrary %dllpath% fail
+      msgbox,,Sx2vJoy %version%,Couldn't load vJoyInterface.dll from path %dllpath%.
    return hDLL
-}
-
-_dlmsg() {
-   global version
-   msgbox, 52, Sx2vJoy %version%, This will open a new tab in your browser to download the image.`n`nWould you like to continue?
-   ifmsgbox Yes
-      return 1
-   return 0
 }
 
 _setup(x, y, z, mode) {
    VJOY_SetAxes(50, 50, 50, 50, 50, 50)
    axis := ""
-   if (mode = 1) and ((x >= (350/2)) or (x <= (-350/2)))
-      axis := "x"
-   if (mode = 1) and ((y >= (350/2)) or (y <= (-350/2)))
-      axis := "y"
-   if (mode = 1) and ((z >= (350/2)) or (z <= (-350/2)))
-      axis := "z"
-   if (mode = 2) and ((x >= (350/2)) or (x <= (-350/2)))
-      axis := "xR"
-   if (mode = 2) and ((y >= (350/2)) or (y <= (-350/2)))
-      axis := "yR"
-   if (mode = 2) and ((z >= (350/2)) or (z <= (-350/2)))
-      axis := "zR"
+   
+   (mode = 1) and ((x >= (350/2)) or (x <= (-350/2))) ? axis := "x"
+   (mode = 1) and ((y >= (350/2)) or (y <= (-350/2))) ? axis := "y"
+   (mode = 1) and ((z >= (350/2)) or (z <= (-350/2))) ? axis := "z"
+   (mode = 2) and ((x >= (350/2)) or (x <= (-350/2))) ? axis := "xR"
+   (mode = 2) and ((y >= (350/2)) or (y <= (-350/2))) ? axis := "yR"
+   (mode = 2) and ((z >= (350/2)) or (z <= (-350/2))) ? axis := "zR"
    
    if (axis = "")
       return
@@ -725,7 +700,6 @@ _setup(x, y, z, mode) {
       remain := 6 - A_Index
       if (remain = 0)
          break
-      ;tooltip, Axis recognized:   %axis%`n`n1) Let your controller go now.`n2) Select which function to assign axis movement to.`n`n%remain% seconds until movement, 0, 0
       msg := "Axis recognized:   "%remain%
       msg2 := "`n`n1) Let your controller go now.`n2) Select which function to assign axis movement to.`n`n"
       msg3 := " seconds until movement"
@@ -734,14 +708,11 @@ _setup(x, y, z, mode) {
       sleep, 1000
    }
    
-   ;tooltip, Moving..., 0, 0
    SplashImage, "", B W375 C0 x0 y0 fs12, Moving...
    sleep,500
    moveaxis(axis)
-   ;tooltip, Done., 0, 0
    SplashImage, "", B W375 C0 x0 y0 fs12, Done.
    sleep,2500
-   ;tooltip, 1) Move axis on your controller.`n2) Wait for the moved axis to appear in this tooltip.`n3) Let go of your controller. Hands off completely.`n4) In the game's controls configuration menu`, select which function to assign axis movement to.`n`nPress hotkey again to exit setup mode., 0, 0
    msg := "1) Move axis on your controller.`n2) Wait for the moved axis to appear in this tooltip.`n3) Let go of your controller. Hands off completely.`n4) In the game's controls configuration menu`, select which function to assign axis movement to.`n`nPress Ctrl+Alt+S again to exit setup mode."
    SplashImage, "", B W375 C0 x0 y0 fs12, %msg%
 }
@@ -749,18 +720,12 @@ _setup(x, y, z, mode) {
 _setupblind(x, y, z, mode) {
    VJOY_SetAxes(50, 50, 50, 50, 50, 50)
    axis := ""
-   if (mode = 1) and ((x >= (350/2)) or (x <= (-350/2)))
-      axis := "x"
-   if (mode = 1) and ((y >= (350/2)) or (y <= (-350/2)))
-      axis := "y"
-   if (mode = 1) and ((z >= (350/2)) or (z <= (-350/2)))
-      axis := "z"
-   if (mode = 2) and ((x >= (350/2)) or (x <= (-350/2)))
-      axis := "xR"
-   if (mode = 2) and ((y >= (350/2)) or (y <= (-350/2)))
-      axis := "yR"
-   if (mode = 2) and ((z >= (350/2)) or (z <= (-350/2)))
-      axis := "zR"
+   (mode = 1) and ((x >= (350/2)) or (x <= (-350/2))) ? axis := "x"
+   (mode = 1) and ((y >= (350/2)) or (y <= (-350/2))) ? axis := "y"
+   (mode = 1) and ((z >= (350/2)) or (z <= (-350/2))) ? axis := "z"
+   (mode = 2) and ((x >= (350/2)) or (x <= (-350/2))) ? axis := "xR"
+   (mode = 2) and ((y >= (350/2)) or (y <= (-350/2))) ? axis := "yR"
+   (mode = 2) and ((z >= (350/2)) or (z <= (-350/2))) ? axis := "zR"
    
    if (axis = "")
       return
@@ -794,7 +759,7 @@ _vjoy_id() {
    
    if (vJoys[0] = 0)
    {
-      msgbox, 16, Sx2vJoy, No vJoy sticks found. Cannot continue.
+      msgbox,,Sx2vJoy %version%,No vJoy sticks found. Cannot continue.
       ExitApp
    }
    
@@ -1026,9 +991,15 @@ _activeWinCheck() {
    }
 }
 
+_vJoy_Close() {
+   DllCall("vJoyInterface\RelinquishVJD", "UInt", vjoy_id)
+   DllCall("vJoyInterface\ResetVJD", "UInt", vjoy_id)
+}
+
 AppQuit:
 if (vjoy_id <> 0) and (vjoy_id <> "")
-   VJoy_Close()
+   _VJoy_Close()
+DLLCall("FreeLibrary", "Ptr", hDLL)
 ExitApp
 return
 
@@ -1039,7 +1010,7 @@ return
 gui:
 SxGUI := A_ScriptDir . "\Sx2vJoy Config GUI.exe"
 ifnotexist, %SxGUI%
-   msgbox Sx2vJoy Config GUI not found.
+   msgbox,,Sx2vJoy %version%,Sx2vJoy Config GUI not found.
 else
    run, "%SxGUI%"
 return
@@ -1096,12 +1067,10 @@ return
 label_setaxis:
 setupmode *= -1
 if (setupmode = 1) {
-   ;tooltip, 1) Move axis on your controller.`n2) Wait for the moved axis to appear in this tooltip.`n3) Let go of your controller. Hands off completely.`n4) In the game's controls configuration menu`, select which function to assign axis movement to.`n`nPress hotkey again to exit setup mode., 0, 0
    msg := "1) Move axis on your controller.`n2) Wait for the moved axis to appear in this tooltip.`n3) Let go of your controller. Hands off completely.`n4) In the game's controls configuration menu`, select which function to assign axis movement to.`n`nPress Ctrl+Alt+S again to exit setup mode."
    SplashImage, "", B W375 C0 x0 y0 fs12, %msg%
 }
 else {
-   ;ToolTip
    SplashImage, off
 }
 return
@@ -1112,7 +1081,6 @@ if (setupmodeblind = 1) {
    ComObjCreate("SAPI.SpVoice").Speak("1")
 }
 else {
-   ;ToolTip
    ComObjCreate("SAPI.SpVoice").Speak("4")
 }
 return
@@ -1122,13 +1090,11 @@ buttonlog *= -1
 if (buttonlog = 1) {
    filedelete, Sx2vJoy.log
    logstart := 1
-   ;tooltip, 1) Press all of the buttons on your 3DConnexion device`, one after the other.`n2) Press hotkey again to exit logging mode.`n3) See Sx2vJoy.log for details., 0, 0
    msg := "1) Press all of the buttons on your 3DConnexion device`, one after the other.`n2) Press hotkey again to exit logging mode.`n3) See Sx2vJoy.log for details."
    SplashImage, "", B W550 C0 x0 y0 fs12, %msg%
 }
 else {
    logstart := 0
-   ;tooltip
    SplashImage, off
 }
 return
