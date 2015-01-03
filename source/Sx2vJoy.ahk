@@ -2,8 +2,14 @@
  * * * Compile_AHK SETTINGS BEGIN * * *
 
 [AHK2EXE]
-Exe_File=%In_Dir%\Sx2vJoy 1.1.exe
+Exe_File=%In_Dir%\Sx2vJoy.exe
 No_UPX=1
+[VERSION]
+Set_Version_Info=1
+File_Version=1.1.6.0
+Inc_File_Version=0
+Product_Version=1.1.16.5
+Set_AHK_Version=1
 [ICONS]
 Icon_1=%In_Dir%\Sx2vJoy.ico
 
