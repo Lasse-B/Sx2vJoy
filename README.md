@@ -1,4 +1,4 @@
-v1.1 build 6
+v1.2 build 1
 
 3DConnexion's drivers and GUI are designed with professional CAD software in mind and don't work too well with games. As there is no GUI to fully customize 3DConnexion's joystick settings, you either have to manually change the configuration .XML files, or you can use Sx2vJoy and use your controller like you would any other joystick.
 
@@ -7,7 +7,7 @@ Here's how you get started:
 1) Download and unzip Sx2vJoy
 
 2) Download and install the open-source program vJoy:
-http://vjoystick.sourceforge.net/sit...load-a-install
+http://vjoystick.sourceforge.net/site/index.php/download-a-install/72-download
 
 3) Set up a vJoy stick to use the following axes setup and as many buttons as your 3DConnexion device has:
 http://i.imgur.com/M8WItd1.png

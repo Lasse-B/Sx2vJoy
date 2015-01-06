@@ -14,8 +14,8 @@
 #include <GuiComboBoxEx.au3>
 #include <GdiPlus.au3>
 #include <EditConstants.au3>
-#include "ConfigLib\StringSize.au3"
-#include "ConfigLib\Marquee.au3"
+#include "Libraries\StringSize.au3"
+#include "Libraries\Marquee.au3"
 
 _GDIPlus_Startup()
 
