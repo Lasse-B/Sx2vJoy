@@ -6,7 +6,7 @@ Exe_File=%In_Dir%\Sx2vJoy.exe
 No_UPX=1
 [VERSION]
 Set_Version_Info=1
-File_Version=1.2.2.0
+File_Version=1.2.3.0
 Inc_File_Version=0
 Product_Version=1.1.16.5
 Set_AHK_Version=1
@@ -32,12 +32,13 @@ Icon_1=%In_Dir%\Sx2vJoy.ico
 ; vJoy integration and logarithmic acceleration by evilC: http://forums.frontier.co.uk/showpost.php?p=423584&postcount=27 & http://forums.frontier.co.uk/showpost.php?p=449012&postcount=37
 ; most of everything else by Lasse B.
 ;
-; Special Thanks for being helpful testers:
+; Special Thanks for providing button data:
 ; Rissen - SpaceMouse Pro
 ; CommanderHaggard - SpaceBall 5000 USB
 ; Asura - SpacePilot
 ; Cmdr Zok - SpaceExplorer
 ; Legendman - SpaceMouse Wireless
+; MaraKan - SpacePilot Pro
 
 #NoTrayIcon
 #singleinstance off
@@ -47,7 +48,7 @@ if not A_IsAdmin
    ExitApp
 }
 
-version := "1.2 build 2"
+version := "1.2 build 3"
 
 Menu, Tray, nostandard
 Menu, Tray, add, Open Configuration GUI, gui
@@ -104,7 +105,7 @@ OnExit, AppQuit
 ; ---------- vJoy init ----------
 
 ; ---------- 3DConnexion init ----------
-btnsSN := btnsSE := btnsSM := btnsSB := btnsSP := btnsSMW := object()
+btnsSN := btnsSE := btnsSM := btnsSB := btnsSP := btnsSMW := btnsSPP := object()
 Gui, +LastFound ;Create GUI to receive messages
 hGui := WinExist()
 WM_INPUT := 0xFF
@@ -120,11 +121,12 @@ logstart := 0
 axis_x := 1, axis_y := 2, axis_z := 3, axis_xR := 4, axis_yR := 5, axis_zR := 6, buttonlog := -1, setupmode := -1, setupmodeblind := -1, deadzone := 1
 pitch := 2, curvature := 3, exponent := 4, is_throttle := 5, inc := 6, zro := 7, invert := 8, throttle_last_pos := 9, axis_suspended := 10
 axis_suspend_condition := 11, axis_suspend_start := 12, wheelstate := 13, wheelstate_min = 14, wheelstate_max = 15, virt_axis_pos := 16, axis_move := 17
-currentProfile := "", MsgExe := "", oldMsgExe := "", oldActiveID, oldExe
+currentProfile := "", MsgExe := "", oldMsgExe := "", oldActiveID, oldExe, displayaxesinput := -1
 
 Controller_settings := object()
 forcemode = 0, lastGUIprofile = "", showIfActive = 0
 
+hotkey, ~^!a, label_displayaxesinput
 hotkey, ~^!s, label_setaxis
 hotkey, ~^!d, label_setaxisblind
 hotkey, ~^!b, label_buttonlog
@@ -168,9 +170,12 @@ InputMsg1133(wParam, lParam) {
       ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
       ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
       if ((setupmode = -1) and (setupmodeblind = -1)) {
-         SN_xVal_virt := _process_axis("x", NumGet(uData, 1, "Short"))
-         SN_yVal_virt := _process_axis("y", NumGet(uData, 3, "Short"))
-         SN_zVal_virt := _process_axis("z", NumGet(uData, 5, "Short"))
+         x_tmp := NumGet(uData, 1, "Short")
+         y_tmp := NumGet(uData, 3, "Short")
+         z_tmp := NumGet(uData, 5, "Short")
+         SN_xVal_virt := _process_axis("x", x_tmp)
+         SN_yVal_virt := _process_axis("y", y_tmp)
+         SN_zVal_virt := _process_axis("z", z_tmp)
       }
    }
    
@@ -178,9 +183,12 @@ InputMsg1133(wParam, lParam) {
       ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
       ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
       if ((setupmode = -1) and (setupmodeblind = -1)) {
-         SN_xRVal_virt := _process_axis("xR", NumGet(uData, 1, "Short"))
-         SN_yRVal_virt := _process_axis("yR", NumGet(uData, 3, "Short"))
-         SN_zRVal_virt := _process_axis("zR", NumGet(uData, 5, "Short"))
+         xR_tmp := NumGet(uData, 1, "Short")
+         yR_tmp := NumGet(uData, 3, "Short")
+         zR_tmp := NumGet(uData, 5, "Short")
+         SN_xRVal_virt := _process_axis("xR", xR_tmp)
+         SN_yRVal_virt := _process_axis("yR", yR_tmp)
+         SN_zRVal_virt := _process_axis("zR", zR_tmp)
       }
    }
    
@@ -188,8 +196,11 @@ InputMsg1133(wParam, lParam) {
    if (msg == 3)
    {
       PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
-      _buttonsPerPID(PID, uData)
+      byte0 := NumGet(uData, 1, "Int")
+      _buttonsPerPID(PID, byte0)
    }
+   if (displayaxesinput = 1)
+      tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
    VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
 }
 
@@ -212,12 +223,19 @@ InputMsg256F(wParam, lParam) {
       ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
       ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
       if ((setupmode = -1) and (setupmodeblind = -1)) {
-         SN_xVal_virt := _process_axis("x", NumGet(uData, 1, "Short"))
-         SN_yVal_virt := _process_axis("y", NumGet(uData, 3, "Short"))
-         SN_zVal_virt := _process_axis("z", NumGet(uData, 5, "Short"))
-         SN_xRVal_virt := _process_axis("xR", NumGet(uData, 7, "Short"))
-         SN_yRVal_virt := _process_axis("yR", NumGet(uData, 9, "Short"))
-         SN_zRVal_virt := _process_axis("zR", NumGet(uData, 11, "Short"))
+         x_tmp := NumGet(uData, 1, "Short")
+         y_tmp := NumGet(uData, 3, "Short")
+         z_tmp := NumGet(uData, 5, "Short")
+         xR_tmp := NumGet(uData, 7, "Short")
+         yR_tmp := NumGet(uData, 9, "Short")
+         zR_tmp := NumGet(uData, 11, "Short")
+         
+         SN_xVal_virt := _process_axis("x", x_tmp)
+         SN_yVal_virt := _process_axis("y", y_tmp)
+         SN_zVal_virt := _process_axis("z", z_tmp)
+         SN_xRVal_virt := _process_axis("xR", xR_tmp)
+         SN_yRVal_virt := _process_axis("yR", yR_tmp)
+         SN_zRVal_virt := _process_axis("zR", zR_tmp)
       }
    }
    
@@ -225,22 +243,26 @@ InputMsg256F(wParam, lParam) {
    if (msg == 3)
    {
       PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
-      _buttonsPerPID(PID, uData)
+      byte0 := NumGet(uData, 1, "Int")
+      _buttonsPerPID(PID, byte0)
    }
+   if (displayaxesinput = 1)
+      tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
    VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
 }
 
-_buttonsPerPID(PID, uData) {
-   global buttonlog, vJoyButtons, vjoy_id
-   (PID = 50721) ? pointer := "btnsSB" ; SpaceBall 5000 (USB)
-   (PID = 50725) ? pointer := "btnsSP" ; SpacePilot (non-Pro)
-   (PID = 50726) ? pointer := "btnsSN" ; SpaceNavigator
-   (PID = 50727) ? pointer := "btnsSE" ; SpaceExplorer
-   (PID = 50731) ? pointer := "btnsSM" ; SpaceMouse Pro
+_buttonsPerPID(PID, byte0) {
+   global buttonlog, vJoyButtons, vjoy_id, btnsSN, btnsSM, btnsSE, btnsSB, btnsSP, btnsSMW, btnsSPP
+   
+   (PID = 50721) ? pointer := "btnsSB"  ; SpaceBall 5000 (USB)
+   (PID = 50725) ? pointer := "btnsSP"  ; SpacePilot (non-Pro)
+   (PID = 50726) ? pointer := "btnsSN"  ; SpaceNavigator
+   (PID = 50727) ? pointer := "btnsSE"  ; SpaceExplorer
+   (PID = 50729) ? pointer := "btnsSPP" ; SpacePilot Pro
+   (PID = 50731) ? pointer := "btnsSM"  ; SpaceMouse Pro
    (PID = 50734) ? pointer := "btnsSMW" ; SpaceMouse Wireless
    (PID = 50735) ? pointer := "btnsSMW" ; SpaceMouse Wireless
    
-   byte0 := NumGet(uData, 1, "Int")
    if (buttonlog = 1)
       _logButton(byte0, device)
    else
@@ -322,7 +344,7 @@ _getRAWdevices() {
 }
 
 Kbd_SetBtn(state,pointer,index) {
-   global btnsSN, btnsSM, btnsSE, btnsSB, btnsSP, btnsSMW   
+   global btnsSN, btnsSM, btnsSE, btnsSB, btnsSP, btnsSMW, btnsSPP
 
    down := %pointer%[index,2]
    up := %pointer%[index,3]
@@ -539,13 +561,14 @@ _readAxesOrder(profile) {
 }
 
 _readBtnConfig(profile) {
-   global btnsSB, btnsSE, btnsSM, btnsSN, btnsSP, btnsSMW
+   global btnsSB, btnsSE, btnsSM, btnsSN, btnsSP, btnsSMW, btnsSPP
    btnsSB := _BtnConfig2Array(profile, "SpaceBall 5000 (USB)")
    btnsSE := _BtnConfig2Array(profile, "SpaceExplorer")
    btnsSM := _BtnConfig2Array(profile, "SpaceMouse Pro")
    btnsSN := _BtnConfig2Array(profile, "SpaceNavigator")
    btnsSP := _BtnConfig2Array(profile, "SpacePilot")
-   btnsSP := _BtnConfig2Array(profile, "SpaceMouse Wireless")
+   btnsSMW := _BtnConfig2Array(profile, "SpaceMouse Wireless")
+   btnsSPP := _BtnConfig2Array(profile, "SpacePilot Pro")
    ;printarray(btnsSM)
 }
 
@@ -1406,6 +1429,10 @@ axis := Controller_settings[axis_zR, is_throttle] = 2 ? "zR" : axis
 
 if (axis <> 0)
    _process_throttle(axis, 0, 2)
+return
+
+label_displayaxesinput:
+displayaxesinput *= -1
 return
 
 label_setaxis:

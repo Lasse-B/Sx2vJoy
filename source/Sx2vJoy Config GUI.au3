@@ -2,6 +2,7 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=Sx2vJoy.ico
 #AutoIt3Wrapper_Compression=4
+#AutoIt3Wrapper_Res_Fileversion=1.2.2.0
 #AutoIt3Wrapper_Run_Au3Stripper=y
 #Au3Stripper_Parameters=/so
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -20,7 +21,7 @@
 _GDIPlus_Startup()
 
 Global $inisection = "default"
-Global $version = "v1.1 build 3"
+Global $version = "v1.2 build 2"
 
 $Form1 = GUICreate("Sx2vJoy Config GUI " & $version, 738, 758)
 $width = 130
@@ -56,7 +57,7 @@ Global $aMarqueeAxs = ""
 
 Dim $aButtonIDs2[0][2]
 
-Dim $aDeviceButtons[5][4] = [["SpaceBall 5000 (USB)", 12, "0,1,2,3,4,5,6,7,8,9,10,11", "1,2,3,4,5,6,7,8,9,A,B,C"], ["SpaceExplorer", 15, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14", "1,2,T,L,R,F,ESC,ALT,SHIFT,CTRL,FIT,PANEL,+,-,2D"], ["SpaceMouse Pro", 15, "0,1,2,4,5,8,12,13,14,15,22,23,24,25,26", "MENU,FIT,T,R,F,ROL,1,2,3,4,ESC,ALT,SHIFT,CTRL,ROT"], ["SpaceNavigator", 2, "0,1", "Left,Right"], ["SpacePilot", 21, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20", "1,2,3,4,5,6,T,L,R,F,ESC,ALT,SHIFT,CTRL,FIT,PANEL,VOL+,VOL-,DOM,3D,CONFIG"]]
+Dim $aDeviceButtons[7][4] = [["SpaceBall 5000 (USB)", 12, "0,1,2,3,4,5,6,7,8,9,10,11", "1,2,3,4,5,6,7,8,9,A,B,C"], ["SpaceExplorer", 15, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14", "1,2,T,L,R,F,ESC,ALT,SHIFT,CTRL,FIT,PANEL,+,-,2D"], ["SpaceMouse Pro", 15, "0,1,2,4,5,8,12,13,14,15,22,23,24,25,26", "MENU,FIT,T,R,F,ROL,1,2,3,4,ESC,ALT,SHIFT,CTRL,ROT"], ["SpaceMouse Wireless", 2, "0,1", "Left, Right"], ["SpaceNavigator", 2, "0,1", "Left,Right"], ["SpacePilot", 21, "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20", "1,2,3,4,5,6,T,L,R,F,ESC,ALT,SHIFT,CTRL,FIT,PANEL,VOL+,VOL-,DOM,3D,CONFIG"], ["SpacePilot Pro", 21, "0,1,2,4,5,8,10,12,13,14,15,16,22,23,24,25,26,27,28,29,30", "MENU,FIT,T,R,F,ROL,ISO,1,2,3,4,5,ESC,ALT,SHIFT,CTRL,PAN/ZOOM,ROT,DOM,+,-"]]
 
 Dim $aLabels[6] = ["x", "y", "z", "xR", "yR", "zR"]
 Dim $aLabelsvJ[6] = ["x", "y", "z", "xR", "yR", "zR"]
@@ -289,7 +290,7 @@ _GUICtrlCreateGroupEx("Output Sensitivity", $gridPos[0][0] * ($spacebetween_x + 
 $spacefromborder_x -= 125
 $spacefromborder_y += 20
 Dim $gridPos[1][2] = [[1, 2]]
-GUICtrlCreateGroup("Pitch", $gridPos[0][0] * ($spacebetween_x + $width) + $spacefromborder_x, $gridPos[0][1] * ($spacebetween_y + $height) + $spacefromborder_y, $width, $height)
+GUICtrlCreateGroup("Pitch / Sensitivity", $gridPos[0][0] * ($spacebetween_x + $width) + $spacefromborder_x, $gridPos[0][1] * ($spacebetween_y + $height) + $spacefromborder_y, $width, $height)
 $aLinSensIDs[0][0] = GUICtrlCreateButton("i", $gridPos[0][0] * ($spacebetween_x + $width) + $spacefromborder_x + $InfoOffset_X, $gridPos[0][1] * ($spacebetween_y + $height) + $spacefromborder_y + $InfoOffset_Y, $InfoWidth, $InfoHeight)
 _GUICtrlButton_SetState($aLinSensIDs[0][0], False)
 For $i = 0 To 5
@@ -671,7 +672,7 @@ Func _buttonGUI($sDeviceName, $sButtonIDs, $sButtonNames, $Profile)
 
 	Local $winheight = $aButtonIDs[0][0] * 25
 
-	Local $btngui = GUICreate("Sx2vJoy " & $version & " " & $sDeviceName & " Button Configurator", 680, $winheight + 15, -1, -1, -1, -1, $Form1)
+	Local $btngui = GUICreate("Sx2vJoy " & $version & " " & $sDeviceName & " Button Configurator", 695, $winheight + 15, -1, -1, -1, -1, $Form1)
 
 	Local $x_space_border = 5
 	Local $y_space_border = 20
@@ -702,9 +703,9 @@ Func _buttonGUI($sDeviceName, $sButtonIDs, $sButtonNames, $Profile)
 		GUICtrlCreateLabel("use 3DC button", $width, $h + $y_space_border, 74, 15)
 
 		$width += 80
-		$aButtonIDs[$i2][0] = GUICtrlCreateInput($aButtonNamesTmp[$i2], $width + ($x_space_between * 1), $h + $y_space_border - 3, 50, 20, 0x0800)
+		$aButtonIDs[$i2][0] = GUICtrlCreateInput($aButtonNamesTmp[$i2], $width + ($x_space_between * 1), $h + $y_space_border - 3, 65, 20, 0x0800)
 
-		$width += 50
+		$width += 65
 		GUICtrlCreateLabel("to push", $width + ($x_space_between * 2), $h + $y_space_border, 45, 15)
 
 		$width += 40
