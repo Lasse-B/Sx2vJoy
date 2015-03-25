@@ -1,4 +1,4 @@
-v1.2 build 3
+v1.2 build 4
 
 3DConnexion's drivers and GUI are designed with professional CAD software in mind and don't work too well with games. As there is no GUI to fully customize 3DConnexion's joystick settings, you either have to manually change the configuration .XML files, or you can use Sx2vJoy and use your controller like you would any other joystick.
 

@@ -6,7 +6,7 @@ Exe_File=%In_Dir%\Sx2vJoy.exe
 No_UPX=1
 [VERSION]
 Set_Version_Info=1
-File_Version=1.2.3.0
+File_Version=1.2.4.0
 Inc_File_Version=0
 Product_Version=1.1.16.5
 Set_AHK_Version=1
@@ -48,7 +48,18 @@ if not A_IsAdmin
    ExitApp
 }
 
-version := "1.2 build 3"
+param1 := param2 := param3 := param4 := param5 := param6 := ""
+loop, %0%
+   param%A_Index% := %A_Index%
+
+if (param1 = "watchdog")
+   ;msgbox watchdog`n`n%param1%`n%param2%`n%param3%`n%param4%`n%param5%`n%param6%
+
+; param1 = keyword; param2 = vJoy ID; param3 = vendor ID; param4 = product ID; param5 = exe to restart; param6 = PID to monitor
+if (param1 = "watchdog") and (param2 <> "") and (param3 <> "") and (param4 <> "") and (param5 <> "") and (param6 <> "")
+   _watchdog(param2,param3,param4,param5,param6)
+
+version := "1.2 build 4"
 
 Menu, Tray, nostandard
 Menu, Tray, add, Open Configuration GUI, gui
@@ -63,6 +74,7 @@ Process, Priority, , High
 coordmode, tooltip, screen
 #HotkeyInterval 1000
 #MaxHotkeysPerInterval 1000
+
 
 ; ---------- out of neccessity ----------
 aDevices := object()
@@ -83,20 +95,40 @@ aDevices[14,0] := "1133,50693", aDevices[14,1] := "CadMan"
 aDevices[15,0] := "1133,50691", aDevices[15,1] := "SpaceMouse Plus (XT) USB" ; same IDs for two devices
 aDevices[0,0] := 15
 AHKHID_UseConstants()
-3dcdevs := _3DCDevices()
+3dcIndexes := _3DCDevices()
 ; ---------- out of neccessity ----------
 
 ; ---------- vJoy init ----------
 axis_list_vjoy := Array("X","Y","Z","RX","RY","RZ")
+axis_list_sx := Array("X","Y","Z","RX","RY","RZ")
 HID_USAGE_X := 0x30, HID_USAGE_Y := 0x31, HID_USAGE_Z := 0x32, HID_USAGE_RX:= 0x33, HID_USAGE_RY:= 0x34, HID_USAGE_RZ:= 0x35
-vjoyconfigdir := "", reconnectattempts := 0, used3DCcontroller := ""
+vjoyconfigdir := "", reconnectattempts := 0, used3DCcontroller := "", vjoy_id := "", function := "", vendorID := "", productID := ""
 hDLL := LoadLibrary()
 sticks := _vjoy_sticks()
-result := _setupControls(sticks, 3dcdevs)      ; The current vjoy device the app is trying to use. Also serves as a "last item selected" for the vjoy id dropdown
-stringsplit, sxmodi, result, "`,"
-vjoy_id := sxmodi1
-function := "InputMsg" . sxmodi2
+
+if (param1 = "recover")
+   ;msgbox recover`n`n%param1%`n%param2%`n%param3%`n%param4%
+
+if (param1 = "recover") and (param2 <> "") and (param3 <> "") and (param4 <> "")
+{
+   vjoy_id := sxmodi2 := param2
+   vendorID := param3
+   function := "InputMsg" . vendorID
+   productID := param4
+}
+
+if (vjoy_id = "") or (function = "") or (productID = "")
+{
+   result := _setupControls(sticks, 3dcIndexes)
+   ;msgbox res`n`n%result%
+   stringsplit, sxmodi, result, "`,"
+   vjoy_id := sxmodi1
+   function := "InputMsg" . sxmodi2
+   vendorID := sxmodi2
+   productID := sxmodi3
+}
 ;msgbox vjoy_id %vjoy_id%`nfunction %function%
+
 InitVJoy(vjoy_id) ; Whether the vjoy_id is connected and under the app's control
 vJoyButtons := DllCall("vJoyInterface\GetVJDButtonNumber", "Int", vjoy_id)
 _checkvJoyAxes()
@@ -106,8 +138,10 @@ OnExit, AppQuit
 
 ; ---------- 3DConnexion init ----------
 btnsSN := btnsSE := btnsSM := btnsSB := btnsSP := btnsSMW := btnsSPP := object()
-Gui, +LastFound ;Create GUI to receive messages
-hGui := WinExist()
+PID := DllCall("GetCurrentProcessId")
+;Gui, +LastFound ;Create GUI to receive messages
+;hGui := WinExist()
+Gui, New, +HwndhGUI, Sx2vJoy Helper Win %PID% ;Create GUI to receive messages
 WM_INPUT := 0xFF
 OnMessage(WM_INPUT, function)
 sNavHID := AHKHID_Register(1, 8, hGui, RIDEV_INPUTSINK) ; 3DConnexion
@@ -121,7 +155,7 @@ logstart := 0
 axis_x := 1, axis_y := 2, axis_z := 3, axis_xR := 4, axis_yR := 5, axis_zR := 6, buttonlog := -1, setupmode := -1, setupmodeblind := -1, deadzone := 1
 pitch := 2, curvature := 3, exponent := 4, is_throttle := 5, inc := 6, zro := 7, invert := 8, throttle_last_pos := 9, axis_suspended := 10
 axis_suspend_condition := 11, axis_suspend_start := 12, wheelstate := 13, wheelstate_min = 14, wheelstate_max = 15, virt_axis_pos := 16, axis_move := 17
-currentProfile := "", MsgExe := "", oldMsgExe := "", oldActiveID, oldExe, displayaxesinput := -1
+currentProfile := "", MsgExe := "", oldMsgExe := "", oldActiveID, oldExe, displayaxesinput := -1, wdexename := ""
 
 Controller_settings := object()
 forcemode = 0, lastGUIprofile = "", showIfActive = 0
@@ -137,18 +171,47 @@ hotkey, ~wheeldown, off
 hotkey, ~wheelup, off
 hotkey, ~mbutton, off
 
+; ---------- (auto) read config init ----------
 gosub, config
-settimer, config, 250
+;settimer, config, 250
+
+MsgNo := DllCall("RegisterWindowMessage", Str,"SHCHANGENOTIFY")
+OnMessage(MsgNo, "ShChangeNotify")
+
+stringleft, Drive, A_ScriptDir, 1
+VarSetCapacity($SHChangeNotifyEntry, 8, 0)
+PIDL := PathGetPIDL(Drive ":")
+NumPut(PIDL, $SHChangeNotifyEntry, 0)
+NumPut(True, $SHChangeNotifyEntry, 4)
+SHCNR_ID := DllCall("Shell32\SHChangeNotifyRegister", UInt,hGui, UInt,0x8000|0x1000|0x2|0x1, Int,0xC0581E0|0x7FFFFFFF|0x80000000, UInt,MsgNo, Int,1, UInt,&$SHChangeNotifyEntry)
+; ---------- (auto) read config init ----------
 
 ;Gui +LastFound 
 ;hWnd := WinExist()
 ;DllCall("RegisterShellHookWindow", UInt, Hwnd)
-;MsgNum := DllCall("RegisterWindowMessage", Str,"SHELLHOOK")
-;OnMessage(MsgNum, "ShellMessage")
+DllCall("RegisterShellHookWindow", UInt, hGui)
+MsgNum := DllCall("RegisterWindowMessage", Str,"SHELLHOOK")
+OnMessage(MsgNum, "ShellMessage")
 ; ---------- other init ----------
 
-trayTip, Sx2vJoy v%version%, %used3DCcontroller% connected to vJoy ID %vjoy_id%
-menu, tray, tip, Sx2vJoy v%version%`n%used3DCcontroller% connected to vJoy ID %vjoy_id%
+; ---------- watchdog ----------
+stringtrimright, scriptname, A_Scriptname, 4
+;stringsplit, filename, A_ScriptName, "."
+source := A_ScriptFullPath
+PID := DllCall("GetCurrentProcessId")
+dest := A_Temp . "\" . scriptname . " watchdog " . PID . ".exe"
+filecopy, %source%, %dest%, 1
+stringsplit, wdexename, dest, "\"
+wdexename := wdexename%wdexename0%
+
+; param1 = keyword; param2 = vJoy ID; param3 = vendor ID; param4 = product ID; param5 = exe to restart; param6 = PID to monitor
+Run *RunAs "%dest%" "watchdog" "%vjoy_id%" "%sxmodi2%" "%productID%" "%source%" "%PID%"
+; ---------- watchdog ----------
+
+3dcname := _3DCIDsToName()
+trayTip, Sx2vJoy v%version%, %3dcname% connected to vJoy ID %vjoy_id%
+menu, tray, tip, Sx2vJoy v%version%`n%3dcname% connected to vJoy ID %vjoy_id%
+
 return
 
 ; ==================================================================================
@@ -159,96 +222,111 @@ InputMsg1133(wParam, lParam) {
    
    devh := AHKHID_GetInputInfo(lParam, II_DEVHANDLE)
    
-   if (devh == -1) or (AHKHID_GetInputData(lParam, uData) = -1) or (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True) <> RIM_TYPEHID) or (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) <> 1133)
+   if (devh == -1) 
       return
    
-   Critical
-   msg := NumGet(uData, 0, "UChar")
-   
-   ;axes
-   if (msg == 1) {
-      ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
-      ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
-      if ((setupmode = -1) and (setupmodeblind = -1)) {
-         x_tmp := NumGet(uData, 1, "Short")
-         y_tmp := NumGet(uData, 3, "Short")
-         z_tmp := NumGet(uData, 5, "Short")
-         SN_xVal_virt := _process_axis("x", x_tmp)
-         SN_yVal_virt := _process_axis("y", y_tmp)
-         SN_zVal_virt := _process_axis("z", z_tmp)
+   if (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True)) = RIM_TYPEHID
+      and (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) = 1133)
+      and (AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True) == productID) {
+      iKey := AHKHID_GetInputData(lParam, uData)
+      
+      if (iKey <> -1) {
+       
+         msg := NumGet(uData, 0, "UChar")
+         
+         ;axes
+         if (msg == 1) { ; translational axes
+            ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
+            ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(1, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
+            if ((setupmode = -1) and (setupmodeblind = -1)) {
+               x_tmp := NumGet(uData, 1, "Short")
+               y_tmp := NumGet(uData, 3, "Short")
+               z_tmp := NumGet(uData, 5, "Short")
+               SN_xVal_virt := _process_axis("x", x_tmp)
+               SN_yVal_virt := _process_axis("y", y_tmp)
+               SN_zVal_virt := _process_axis("z", z_tmp)
+            }
+         }
+         
+         if (msg == 2) { ; rotational axes
+            ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
+            ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
+            if ((setupmode = -1) and (setupmodeblind = -1)) {
+               xR_tmp := NumGet(uData, 1, "Short")
+               yR_tmp := NumGet(uData, 3, "Short")
+               zR_tmp := NumGet(uData, 5, "Short")
+               SN_xRVal_virt := _process_axis("xR", xR_tmp)
+               SN_yRVal_virt := _process_axis("yR", yR_tmp)
+               SN_zRVal_virt := _process_axis("zR", zR_tmp)
+            }
+         }
+         
+         ;buttons
+         if (msg == 3)
+         {
+            PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
+            byte0 := NumGet(uData, 1, "Int")
+            _buttonsPerPID(PID, byte0)
+         }
+         if (displayaxesinput = 1)
+            tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
+         VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
       }
    }
-   
-   if (msg == 2) {
-      ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
-      ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(2, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"))
-      if ((setupmode = -1) and (setupmodeblind = -1)) {
-         xR_tmp := NumGet(uData, 1, "Short")
-         yR_tmp := NumGet(uData, 3, "Short")
-         zR_tmp := NumGet(uData, 5, "Short")
-         SN_xRVal_virt := _process_axis("xR", xR_tmp)
-         SN_yRVal_virt := _process_axis("yR", yR_tmp)
-         SN_zRVal_virt := _process_axis("zR", zR_tmp)
-      }
-   }
-   
-   ;buttons
-   if (msg == 3)
-   {
-      PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
-      byte0 := NumGet(uData, 1, "Int")
-      _buttonsPerPID(PID, byte0)
-   }
-   if (displayaxesinput = 1)
-      tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
-   VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
 }
 
 ; ==================================================================================
 ; HID INPUT VID = 9583 (256F)
 ; ==================================================================================
-InputMsg256F(wParam, lParam) {
+InputMsg9583(wParam, lParam) {
    Local devh, iKey, sLabel, pointer := ""
    
    devh := AHKHID_GetInputInfo(lParam, II_DEVHANDLE)
    
-   if (devh == -1) or (AHKHID_GetInputData(lParam, uData) = -1) or (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True) <> RIM_TYPEHID) or (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) <> 9583)
+   if (devh == -1) 
       return
    
-   Critical
-   msg := NumGet(uData, 0, "UChar")
-   
-   ;axes
-   if (msg == 1) {
-      ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
-      ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
-      if ((setupmode = -1) and (setupmodeblind = -1)) {
-         x_tmp := NumGet(uData, 1, "Short")
-         y_tmp := NumGet(uData, 3, "Short")
-         z_tmp := NumGet(uData, 5, "Short")
-         xR_tmp := NumGet(uData, 7, "Short")
-         yR_tmp := NumGet(uData, 9, "Short")
-         zR_tmp := NumGet(uData, 11, "Short")
+   if (AHKHID_GetDevInfo(devh, DI_DEVTYPE, True)) = RIM_TYPEHID
+      and (AHKHID_GetDevInfo(devh, DI_HID_VENDORID, True) = 9583)
+      and (AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True) == productID) {
+      iKey := AHKHID_GetInputData(lParam, uData)
+      
+      if (iKey <> -1) {
+         msg := NumGet(uData, 0, "UChar")
          
-         SN_xVal_virt := _process_axis("x", x_tmp)
-         SN_yVal_virt := _process_axis("y", y_tmp)
-         SN_zVal_virt := _process_axis("z", z_tmp)
-         SN_xRVal_virt := _process_axis("xR", xR_tmp)
-         SN_yRVal_virt := _process_axis("yR", yR_tmp)
-         SN_zRVal_virt := _process_axis("zR", zR_tmp)
+         ;axes
+         if (msg == 1) {
+            ((setupmode = 1) and (setupmodeblind = -1)) ? _setup(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
+            ((setupmode = -1) and (setupmodeblind = 1)) ? _setupblind(3, NumGet(uData, 1, "Short"), NumGet(uData, 3, "Short"), NumGet(uData, 5, "Short"), NumGet(uData, 7, "Short"), NumGet(uData, 9, "Short"), NumGet(uData, 11, "Short"))
+            if ((setupmode = -1) and (setupmodeblind = -1)) {
+               x_tmp := NumGet(uData, 1, "Short")
+               y_tmp := NumGet(uData, 3, "Short")
+               z_tmp := NumGet(uData, 5, "Short")
+               xR_tmp := NumGet(uData, 7, "Short")
+               yR_tmp := NumGet(uData, 9, "Short")
+               zR_tmp := NumGet(uData, 11, "Short")
+               
+               SN_xVal_virt := _process_axis("x", x_tmp)
+               SN_yVal_virt := _process_axis("y", y_tmp)
+               SN_zVal_virt := _process_axis("z", z_tmp)
+               SN_xRVal_virt := _process_axis("xR", xR_tmp)
+               SN_yRVal_virt := _process_axis("yR", yR_tmp)
+               SN_zRVal_virt := _process_axis("zR", zR_tmp)
+            }
+         }
+         
+         ;buttons
+         if (msg == 3)
+         {
+            PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
+            byte0 := NumGet(uData, 1, "Int")
+            _buttonsPerPID(PID, byte0)
+         }
+         if (displayaxesinput = 1)
+            tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
+         VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
       }
    }
-   
-   ;buttons
-   if (msg == 3)
-   {
-      PID := AHKHID_GetDevInfo(devh, DI_HID_PRODUCTID, True)
-      byte0 := NumGet(uData, 1, "Int")
-      _buttonsPerPID(PID, byte0)
-   }
-   if (displayaxesinput = 1)
-      tooltip, x:%x_tmp%`ny:%y_tmp%`nz:%z_tmp%`nxR:%xR_tmp%`nyR:%yR_tmp%`nzR:%zR_tmp%, 0, 0
-   VJOY_SetAxes(SN_xVal_virt, SN_yVal_virt, SN_zVal_virt, SN_xRVal_virt, SN_yRVal_virt, SN_zRVal_virt)
 }
 
 _buttonsPerPID(PID, byte0) {
@@ -290,7 +368,7 @@ _3DCDevices() {
       msgbox,16,Sx2vJoy %version%,No HID devices detected, not just no 3DConnexion devices. Something is very wrong here.`n`nExiting.
       exitapp
    }
-   3dcnames := ""
+   3dcIndex := ""
    loop, parse, devices, `n, `r
    {
       set := A_LoopField
@@ -301,18 +379,18 @@ _3DCDevices() {
          check := aDevices[A_Index,0]
          if (set = check)
          {
-            3dcnames .= aDevices[A_Index,1] "|"
+            3dcIndex .= A_Index "|"
             break
          }
       }
    }
-   stringtrimright, 3dcnames, 3dcnames, 1
-   if (3dcnames = "")
+   stringtrimright, 3dcIndex, 3dcIndex, 1
+   if (3dcIndex = "")
    {
       msgbox,16,Sx2vJoy %version%,No 3DConnexion devices detected, cannot continue.`n`nExiting.
       exitapp
    }
-   return 3dcnames
+   return 3dcIndex
 }
 
 _getRAWdevices() {
@@ -356,20 +434,21 @@ Kbd_SetBtn(state,pointer,index) {
 }
 
 VJOY_SetAxes(SNavX, SNavY, SNavZ, SNavRX, SNavRY, SNavRZ) {
-   global vjoy_id, axis_list_vjoy, version, reconnectattempts
+   global vjoy_id, axis_list_vjoy, axis_list_sx, version, reconnectattempts
    loop, 6
    {
-      ax := axis_list_vjoy[A_Index]
+      ax_vj := axis_list_vjoy[A_Index]
+      ax_sx := axis_list_sx[A_Index]
       
-      ret := DllCall("vJoyInterface\SetAxis", "Int", 327.68 * SNav%ax%, "UInt", vjoy_id, "UInt", HID_USAGE_%ax%)
+      ret := DllCall("vJoyInterface\SetAxis", "Int", 327.68 * SNav%ax_vj%, "UInt", vjoy_id, "UInt", HID_USAGE_%ax_sx%)
       if (!ret) {
          reconnectattempts++
          _reconnect()
          if (reconnectattempts > 3)
          {
-            axis_val := 327.68 * SNav%ax%
-            usage := HID_USAGE_%ax%
-            msgbox,16,Sx2vJoy %version%,VJOY_SetAxes`n`naxis: %ax%`nusage: %usage%`naxis value: %axis_val%`nErrorLevel: %ErrorLevel%`nReturned: %ret%`n`nExiting.
+            axis_val := 327.68 * SNav%ax_sx%
+            usage := HID_USAGE_%ax_sx%
+            msgbox,16,Sx2vJoy %version%,VJOY_SetAxes`n`naxis: %ax_sx%`nusage: %usage%`naxis value: %axis_val%`nErrorLevel: %ErrorLevel%`nReturned: %ret%`n`nExiting.
             exitapp
          }
       }
@@ -558,6 +637,7 @@ _readAxesOrder(profile) {
       
    loop, parse, tempaxes, `,
       axis_list_vjoy[A_Index] := A_LoopField
+   ;printarray(axis_list_vjoy)
 }
 
 _readBtnConfig(profile) {
@@ -976,30 +1056,18 @@ _vjoy_sticks() {
    ExitApp
 }
 
-_setupControls(vJoys, 3DCs) {
+_setupControls(vJoys, 3dcIndexes) {
    global version, aDevices, vJoy_device, 3DC_device, used3DCcontroller
-   
    num_vJoys := ""
    num_3DCs := ""
    
    stringsplit, count_vjoys, vJoys, "|"
-   stringsplit, count_3DCs, 3DCs, "|"
+   stringsplit, count_3DCs, 3dcIndexes, "|"
    
    if (count_vjoys0 = 1) and (count_3DCs0 = 1)
-   {
-      loops := aDevices[0,0]
-      loop, %loops%
-      {
-         name := aDevices[A_Index,1]
-         IDs := aDevices[A_Index,0]
-         if (name = 3DCs)
-         {
-            stringsplit, split, IDs, "`,"
-            used3DCcontroller := name
-            return count_vjoys0 "," split1
-         }
-      }
-   }
+      return vJoys "," aDevices[3dcIndexes,0]
+   
+   ;msgbox setupControls`n`n%vJoys%`n%3dcIndexes%
    
    target_device := vJoys[1]
 
@@ -1007,20 +1075,6 @@ _setupControls(vJoys, 3DCs) {
    gui, name:new,Hwndhwnd_sx,Sx2vJoy %version%
    gui, name:add, text,w169 h15, Select your 3DConnexion controller:
    gui, name:add, text, x10 y40 w160 h50, Select the vJoy target device:
-      
-   3DC_list := ""
-   loop %count_3DCs0%
-   {
-      3DC_list .= (A_Index <> count_3DCs0) ? count_3DCs%A_Index% . "|" : count_3DCs%A_Index%
-      
-      if (count_3DCs0 = 1)
-         3DC_list .= (A_Index = count_3DCs0) ? "||" : "" ; preselect last 3DConnexion device
-      else
-      {
-         3DC_list .= (A_Index = 1) ? "|" : "" ; preselect first 3DConnexion device
-         ;3DC_list .= (A_Index = count_3DCs0) ? "||" : "" ; preselect last 3DConnexion device
-      }
-   }
    
    vJoy_list := ""
    loop %count_vjoys0%
@@ -1035,8 +1089,23 @@ _setupControls(vJoys, 3DCs) {
          vJoy_list .= (A_Index = count_vjoys0) ? "||" : "" ; preselect last vJoy target device
       }
    }
+      
+   3DC_list := ""
+   3DC_list_idx := ""
+   loop %count_3DCs0%
+   {
+      3DC_list .= (A_Index <> count_3DCs0) ? aDevices[count_3DCs%A_Index%,1] . "|" : aDevices[count_3DCs%A_Index%,1]
+      3DC_list_idx .= count_3DCs%A_Index% . "|"
+      if (count_3DCs0 = 1)
+         3DC_list .= (A_Index = count_3DCs0) ? "||" : "" ; preselect last 3DConnexion device
+      else
+      {
+         3DC_list .= (A_Index = 1) ? "|" : "" ; preselect first 3DConnexion device
+         ;3DC_list .= (A_Index = count_3DCs0) ? "||" : "" ; preselect last 3DConnexion device
+      }
+   }
    
-   gui, name:add, dropdownlist, x185 y2 w180 v3DC_device, %3DC_list%
+   gui, name:add, dropdownlist, x185 y2 w180 v3DC_device AltSubmit, %3DC_list%
    gui, name:add, dropdownlist, x185 y37 w180 vvJoy_device, %vJoy_list%
    gui, name:add, button, x145 y70 w80 Default gnamebtn, OK
    gui, name:show, AutoSize Center
@@ -1049,21 +1118,10 @@ _setupControls(vJoys, 3DCs) {
          break
    }
    
-   used3DCcontroller := 3DC_device
-   
-   loops := aDevices[0,0]
-   loop, %loops%
-   {
-      name := aDevices[A_Index,1]
-      IDs := aDevices[A_Index,0]
-      if (name == 3DC_device)
-      {
-         stringsplit, split, IDs, "`,"
-         3DC_device := split1
-         break
-      }
-   }
-   return vJoy_device "," 3DC_device
+   idx := 3DC_device
+   stringsplit, idxsplit, 3DC_list_idx, "|"
+   used3DCcontroller := aDevices[idxsplit%idx%,0]
+   return vJoy_device "," used3DCcontroller
    
    namebtn:
    gui, submit, nohide
@@ -1223,7 +1281,6 @@ _configMain(parameter) {
             }
             if (tempForce = 2) and not (tempExtbl = "") and not (tempExtbl = " ") ; switch between "specific application" profiles
             {
-               ;if (tempExtbl = MsgExe)
                if (tempExtbl = oldExe)
                {
                   currentProfile := match1
@@ -1233,10 +1290,11 @@ _configMain(parameter) {
       }
    }
    
-   ;oldMsgExe := MsgExe
    if (showIfActive = 1) 
+   {
+      TrayTip
       TrayTip, Sx2vJoy, Profile: %currentProfile%`nProcess: %oldExe%, 5
-      ;TrayTip, Sx2vJoy, Profile: %currentProfile%`nProcess: %MsgExe%, 5
+   }
       
    _readAxesConfig(currentProfile)
    _readBtnConfig(currentProfile)
@@ -1244,18 +1302,8 @@ _configMain(parameter) {
    lastConfigCheck := A_Now . A_MSec
 }
 
-ShellMessage(wParam, lParam)
-{
-   global MsgExe, oldMsgExe, currentProfile
-   ;If (wParam & 4) { ;HSHELL_WINDOWACTIVATED
-      WinGet, MsgExe, ProcessName, ahk_id %lParam%
-   ;   if not (MsgExe = "")
-      if not (oldMsgExe = MsgExe)
-      {
-         _configMain(1)
-         oldMsgExe := MsgExe
-      }
-   ;}
+ShellMessage(wParam, lParam) {
+   _activeWinCheck()
 }
 
 _activeWinCheck() {
@@ -1265,7 +1313,6 @@ _activeWinCheck() {
    if not (oldExe = currentExe)
    {
       oldExe := currentExe
-      ;tooltip, %currentActiveID%`n%currentExe%, 0, 0
       _configMain(1)
    }
 }
@@ -1363,10 +1410,103 @@ _reconnect() {
    _checkvJoyAxes()
 }
 
+; param1 = keyword; param2 = vJoy ID; param3 = vendor ID; param4 = product ID; param5 = exe to restart; param6 = PID to monitor
+_watchdog(vj_id, 3dc_vid, 3dc_pid, source, PID) {
+   stringsplit, monitor, source, "\"
+   monitor := monitor%monitor0%
+   OnExit, AppQuitWD
+   Loop
+   {
+      regread, crashui, HKCU, SOFTWARE\Microsoft\Windows\Windows Error Reporting\, DontShowUI
+      if (crashui = 0)
+         regwrite, REG_DWORD, HKCU, SOFTWARE\Microsoft\Windows\Windows Error Reporting\, DontShowUI, 1
+      
+      process, exist, %PID%
+      if not errorlevel
+      {
+         Run *RunAs "%source%" "recover" %vj_id% %3dc_vid% %3dc_pid%
+         stringsplit, logdir_tmp, source, "\"
+         logdir := ""
+         loops := logdir_tmp0 - 1
+         loop, %loops%
+            logdir .= logdir_tmp%A_Index% . "\"
+         logfile = %logdir%restart.log
+         name := logdir_tmp%logdir_tmp0%
+         stringtrimright, name, name, 4
+         content = %A_Year%-%A_Mon%-%A_MDay% %A_Hour%:%A_Min%:%A_Sec%`trestarted %name%
+         fileappend, %content%, %logfile%
+         _WDselfDelete()
+         exitapp
+      }
+      sleep, 100
+   }
+}
+
+_WDselfDelete() {
+   wddel = %A_ScriptDir%\wddel.cmd
+   pidself := DllCall("GetCurrentProcessId")
+   content = :loop`ntasklist | find " %pidself% " > nul`nif not errorlevel 1 (`n`ttimeout /t 1 > nul`n`tgoto :loop`n)`ndel "%A_ScriptFullPath%"`ndel "%wddel%"
+   fileappend, %content%, %wddel%
+   Run, %COMSPEC% /c %wddel%,,hide 
+}
+
+_3DCIDsToName() {
+   global aDevices, vendorID, productID
+   string := vendorID . "," . productID
+   loops := aDevices[0,0]
+   Loop, %loops%
+   {
+      if (aDevices[A_Index,0] = string)
+         return aDevices[A_Index,1]
+   }
+}
+
+ShChangeNotify(wParam, lParam, msg, hwnd) {
+   hLock := DllCall("Shell32\SHChangeNotification_Lock", UInt,wParam, UInt,lParam, UIntP,pppidl, UIntP,plEvent)
+   if (plEvent = 0x00002000)
+   {
+      Val1 := PIDLGetPath(NumGet(pppidl+0))
+      stringright, cfg, Val1, 10
+      if (cfg = "config.ini")
+         _configMain(0)
+   }
+   DllCall("Shell32\SHChangeNotification_Unlock", UInt,hLock)
+}
+
+PathGetPIDL(sPath) {
+   Return DllCall("Shell32\ILCreateFromPath"(A_IsUnicode ? "W":"A"), Str,sPath, UInt)
+}
+
+PIDLGetPath(PIDL) {
+   VarSetCapacity(sPath, 520, 0)
+   DllCall("Shell32\SHGetPathFromIDList"(A_IsUnicode ? "W":"A"), UInt,PIDL, Str,sPath)
+   Return sPath
+}
+
+GuiClose:
+errorlog = %A_ScriptDir%\error.log
+content = %A_Year%-%A_Mon%-%A_MDay% %A_Hour%:%A_Min%:%A_Sec%`tthis should not have happened
+fileappend, %content%, %errorlog%
+;gosub, AppQuit
+ExitApp
+return
+
 AppQuit:
+trayTip, Sx2vJoy v%version%, Closing...
+regwrite, REG_DWORD, HKCU, SOFTWARE\Microsoft\Windows\Windows Error Reporting\, DontShowUI, 0
+DllCall("Shell32\SHChangeNotifyDeregister", UInt,SHCNR_ID)
 if (vjoy_id <> 0) and (vjoy_id <> "")
    _VJoy_Close()
-DLLCall("FreeLibrary", "Ptr", hDLL)
+process, close, %wdexename%
+process, waitclose, %wdexename%, 10
+if (hDLL <> "")
+   DLLCall("FreeLibrary", "Ptr", hDLL)
+filedelete, %dest%
+ExitApp
+return
+
+AppQuitWD:
+_WDselfDelete()
 ExitApp
 return
 
@@ -1384,7 +1524,7 @@ return
 
 config:
 filetime := filegettime("config.ini")
-_activeWinCheck()
+;_activeWinCheck()
 if (filetime > lastConfigCheck)
    _configMain(0)
 return
@@ -1433,6 +1573,7 @@ return
 
 label_displayaxesinput:
 displayaxesinput *= -1
+tooltip
 return
 
 label_setaxis:
@@ -1471,5 +1612,6 @@ else {
 return
 
 about:
-msgbox,64,Sx2vJoy, Sx2vJoy v%version% by Lasse B.`n`n%used3DCcontroller% connected to vJoy ID %vjoy_id%
+3dcname := _3DCIDsToName()
+msgbox,64,Sx2vJoy, Sx2vJoy v%version% by Lasse B.`n`n%3dcname% connected to vJoy ID %vjoy_id%
 return

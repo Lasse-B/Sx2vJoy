@@ -21,7 +21,7 @@
 _GDIPlus_Startup()
 
 Global $inisection = "default"
-Global $version = "v1.2 build 2"
+Global $version = "v1.2 build 3"
 
 $Form1 = GUICreate("Sx2vJoy Config GUI " & $version, 738, 758)
 $width = 130
@@ -416,7 +416,7 @@ While 1
 		Case $aButtonIDs[0]
 			_infobox("devsel")
 		Case $aButtonIDs[1]
-			if not stringinstr(stringlower(guictrlread($aButtonIDs[1])), "choose your device") then
+			If Not StringInStr(StringLower(GUICtrlRead($aButtonIDs[1])), "choose your device") Then
 				$index = _ArraySearch($aDeviceButtons, GUICtrlRead($aButtonIDs[1]), 0, 0, 0, 2, 1, -1)
 				_buttonGUI(GUICtrlRead($aButtonIDs[1]), $aDeviceButtons[$index][2], $aDeviceButtons[$index][3], GUICtrlRead($aProfileIDs[1]))
 			EndIf
@@ -1282,7 +1282,7 @@ Func _linsensHandler($method, $i)
 		$num1 = Number(GUICtrlRead($aLinSensIDs[$i][1]))
 		GUICtrlSetData($aLinSensIDs[$i][1], 0)
 		$aLinSensIDs[$i][3] += $num1 * 0.001
-		If $aLinSensIDs[$i][3] < 1 Then $aLinSensIDs[$i][3] = 1
+		If $aLinSensIDs[$i][3] < 0 Then $aLinSensIDs[$i][3] = 0
 		If $aLinSensIDs[$i][3] > 100 Then $aLinSensIDs[$i][3] = 100
 		GUICtrlSetData($aLinSensIDs[$i][0], (StringFormat("%#.3f", $aLinSensIDs[$i][3])))
 		;If ($new <> $old) Then
@@ -1295,8 +1295,8 @@ Func _linsensHandler($method, $i)
 		$old = $aLinSensIDs[$i][4]
 		$new = $aLinSensIDs[$i][3]
 		$num0 = Number(GUICtrlRead($aLinSensIDs[$i][0]))
-		If $num0 < 1 Then
-			$num0 = 1
+		If $num0 < 0 Then
+			$num0 = 0
 			$redraw = 0
 			GUICtrlSetData($aLinSensIDs[$i][0], $num0)
 			$aLinSensIDs[$i][3] = $num0
@@ -1605,6 +1605,27 @@ Func _readconfig($new = 0)
 		GUICtrlSetData($aExponentIDs[$i + 1][0], IniRead(@ScriptDir & "\config.ini", $Profile, "axis " & $aLabels[$i] & " exponent", 3))
 		GUICtrlSetData($aExponentIDs[$i + 1][1], IniRead(@ScriptDir & "\config.ini", $Profile, "axis " & $aLabels[$i] & " exponent", 3))
 	Next
+
+	$axesOrder = IniRead(@ScriptDir & "\config.ini", $Profile, "axes order", 0)
+	If Not ($axesOrder == 0) Then
+		$split = StringSplit($axesOrder, ",")
+		If IsArray($split) Then
+			$x = _ArraySearch($split, "x")
+			$y = _ArraySearch($split, "y")
+			$z = _ArraySearch($split, "z")
+			$xR = _ArraySearch($split, "xR")
+			$yR = _ArraySearch($split, "yR")
+			$zR = _ArraySearch($split, "zR")
+			If Not ($x = -1) And Not ($y = -1) And Not ($z = -1) And Not ($xR = -1) And Not ($yR = -1) And Not ($zR = -1) Then
+				For $i = 1 To 6
+					If $split[$i] = "xR" Then $split[$i] = "Rx"
+					If $split[$i] = "yR" Then $split[$i] = "Ry"
+					If $split[$i] = "zR" Then $split[$i] = "Rz"
+					_GUICtrlComboBox_SetCurSel($aAxesIDs[$i], _GUICtrlComboBox_FindStringExact($aAxesIDs[$i], $split[$i]))
+				Next
+			EndIf
+		EndIf
+	EndIf
 
 	If $new = 0 Then
 		For $i = 1 To 6
